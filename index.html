@@ -95,7 +95,16 @@ h1{font:600 clamp(26px,5vw,34px)/1.1 var(--display);margin:8px 0 0;text-wrap:bal
 .done p{margin:0;color:var(--muted);max-width:44ch}
 .done .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
 
-footer{font:500 11px/1.6 var(--mono);color:var(--muted);text-align:center}
+footer{font:500 11px/1.6 var(--mono);color:var(--muted);text-align:center;text-wrap:balance}
+.stats .streak b{color:var(--gold)}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.day{display:flex;flex-direction:column;align-items:center;gap:6px;font:500 10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.day i{width:100%;max-width:56px;height:8px;border-radius:999px;background:var(--line);transition:background .3s ease}
+.day.on i{background:var(--gold);box-shadow:0 0 12px var(--gold-soft)}
+.day.today span{color:var(--fg)}
+.mode{font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+.chip span.due{color:var(--gold);opacity:1}
+.btn.danger{color:var(--again);border-color:var(--again)}
 
 @media (max-width:480px){.face{padding:22px 20px 18px}.card{min-height:400px}.stats{gap:14px}}
 @media (prefers-reduced-motion:reduce){.card,.bar i,.btn,.chip{transition:none}}
@@ -109,15 +118,17 @@ footer{font:500 11px/1.6 var(--mono);color:var(--muted);text-align:center}
       <h1>Org Psych Recall</h1>
     </div>
     <div class="stats" aria-live="polite">
-      <div class="g"><b id="sGood">0</b>known</div>
-      <div class="a"><b id="sAgain">0</b>again</div>
-      <div><b id="sLeft">0</b>left</div>
+      <div class="streak"><b id="sStreak">0</b>day streak</div>
+      <div><b id="sLeft">0</b>left today</div>
+      <div class="g"><b id="sLearned">0</b>of <span id="sTotal">0</span> learned</div>
     </div>
   </header>
 
+  <div class="week" id="week" aria-label="Last 7 days"></div>
+
   <div class="chips" id="chips" role="group" aria-label="Topics"></div>
 
-  <div class="progress"><span id="pText">0 / 0</span><div class="bar"><i id="pBar"></i></div></div>
+  <div class="progress"><span id="pText">0 / 0</span><div class="bar"><i id="pBar"></i></div><span id="pMode" class="mode"></span></div>
 
   <section id="study">
     <div class="stage">
@@ -142,22 +153,22 @@ footer{font:500 11px/1.6 var(--mono);color:var(--muted);text-align:center}
   </section>
 
   <section class="done" id="done" hidden>
-    <div class="eyebrow">Session complete</div>
-    <div class="score" id="dScore">0%</div>
-    <h2 id="dTitle">First-try recall</h2>
+    <div class="eyebrow" id="dEyebrow">Done for today</div>
+    <div class="score" id="dScore">0</div>
+    <h2 id="dTitle">day streak</h2>
     <p id="dText"></p>
     <div class="row">
-      <button class="btn good" id="btnMissed">Review missed cards</button>
-      <button class="btn ghost" id="btnRestart">Start over</button>
+      <button class="btn good" id="btnMore">Learn 5 new cards</button>
+      <button class="btn ghost" id="btnCram">Practice all anyway</button>
     </div>
   </section>
 
   <div class="toolbar">
-    <button class="btn ghost" id="btnShuffle">Shuffle</button>
-    <button class="btn ghost" id="btnReset">Restart deck</button>
+    <button class="btn ghost" id="btnToday">Today's review</button>
+    <button class="btn ghost" id="btnReset">Reset progress</button>
   </div>
 
-  <footer>Built from the permanent notes linked in your course note · Again sends a card back into the queue</footer>
+  <footer>Got it pushes a card further out: 1 → 3 → 7 → 16 → 35 → 90 days · Again brings it back tomorrow · Progress is saved in this browser</footer>
 </div>
 
 <script>
@@ -243,32 +254,81 @@ const CARDS = [
 {t:"Freud",s:"Ego defense mechanisms",q:"\"I don't have a problem\", despite clear evidence. Which defense?",a:"<p><em>Denial</em>: refusing to accept a reality.</p>"}
 ];
 
+// ── Spaced repetition (Leitner boxes) ──────────────────────────
+const INTERVALS = [0,1,3,7,16,35,90];   // days, indexed by box
+const NEW_PER_DAY = 10;
+const KEY = "opr-srs-v1";
+
+function hash(s){let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return "c"+(h>>>0).toString(36)}
+CARDS.forEach(c=>c.id=hash(c.q));
+
 const TOPICS = ["All", ...new Set(CARDS.map(c=>c.t))];
 const $ = id => document.getElementById(id);
-const store = {get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const ls = {get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 
-let topic = store.get("opr-topic","All");
-if(!TOPICS.includes(topic)) topic="All";
-let queue=[], current=null, flipped=false, good=0, again=0, total=0, firstTry=0, missed=new Set(), seen=new Set();
+function dayStr(d=new Date()){const z=n=>String(n).padStart(2,"0");return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`}
+function addDays(s,n){const [y,m,d]=s.split("-").map(Number);return dayStr(new Date(y,m-1,d+n))}
+const TODAY = dayStr();
+
+let S = ls.get(KEY,null) || {cards:{}, history:[], newDate:"", newCount:0};
+if(S.newDate!==TODAY){S.newDate=TODAY;S.newCount=0}
+const save=()=>ls.set(KEY,S);
+
+let topic = ls.get("opr-topic","All"); if(!TOPICS.includes(topic)) topic="All";
+let queue=[], current=null, flipped=false, mode="review", total=0, doneCount=0, lapsed=new Set();
+
+const inTopic = i => topic==="All" || CARDS[i].t===topic;
+const st = i => S.cards[CARDS[i].id];
+const isDue = i => st(i) && st(i).due<=TODAY;
+const isNew = i => !st(i);
 
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+function streak(){
+  const h=new Set(S.history); let n=0, d=h.has(TODAY)?TODAY:addDays(TODAY,-1);
+  while(h.has(d)){n++; d=addDays(d,-1)}
+  return n;
+}
+
+function buildToday(extraNew=0){
+  const idx=CARDS.map((c,i)=>i).filter(inTopic);
+  const due=shuffle(idx.filter(isDue));
+  const newAllowance=Math.max(0,NEW_PER_DAY-S.newCount)+extraNew;
+  const fresh=idx.filter(isNew).slice(0,newAllowance);
+  return [...due,...fresh];
+}
+
+function start(list, m="review"){
+  mode=m; queue=[...list]; total=queue.length; doneCount=0; lapsed=new Set();
+  $("study").hidden=false; $("done").hidden=true;
+  if(!queue.length){finish();return}
+  next();
+}
+const startToday=(extra=0)=>start(buildToday(extra),"review");
 
 function renderChips(){
   $("chips").innerHTML="";
   TOPICS.forEach(t=>{
-    const n = t==="All"?CARDS.length:CARDS.filter(c=>c.t===t).length;
+    const idx=CARDS.map((c,i)=>i).filter(i=>t==="All"||CARDS[i].t===t);
+    const due=idx.filter(isDue).length;
     const b=document.createElement("button");
     b.className="chip"; b.type="button"; b.setAttribute("aria-pressed",String(t===topic));
-    b.innerHTML=`${t}<span>${n}</span>`;
-    b.onclick=()=>{topic=t;store.set("opr-topic",t);renderChips();start()};
+    b.innerHTML=`${t}<span class="${due?"due":""}">${due?due+" due":idx.length}</span>`;
+    b.onclick=()=>{topic=t;ls.set("opr-topic",t);renderChips();startToday()};
     $("chips").appendChild(b);
   });
 }
 
-function start(list){
-  const pool = list || CARDS.map((c,i)=>i).filter(i=>topic==="All"||CARDS[i].t===topic);
-  queue = shuffle([...pool]); total=queue.length; good=0; again=0; firstTry=0; missed=new Set(); seen=new Set();
-  $("study").hidden=false; $("done").hidden=true; next();
+function renderWeek(){
+  const h=new Set(S.history), names=["Su","Mo","Tu","We","Th","Fr","Sa"];
+  $("week").innerHTML="";
+  for(let k=6;k>=0;k--){
+    const d=addDays(TODAY,-k), [y,m,dd]=d.split("-").map(Number);
+    const el=document.createElement("div");
+    el.className="day"+(h.has(d)?" on":"")+(k===0?" today":"");
+    el.innerHTML=`<i></i><span>${k===0?"Today":names[new Date(y,m-1,dd).getDay()]}</span>`;
+    $("week").appendChild(el);
+  }
 }
 
 function next(){
@@ -280,8 +340,8 @@ function next(){
     $("fTopic").textContent=c.t; $("bTopic").textContent=c.t;
     $("fQ").textContent=c.q; $("bA").innerHTML=c.a; $("bSrc").textContent=c.s;
     if(c.n){$("bNote").innerHTML="<b>Correction:</b> "+c.n;$("bNote").hidden=false}else{$("bNote").hidden=true}
-    $("fNum").textContent = missed.has(current) ? "Retry" : `#${CARDS.indexOf(c)+1}`;
-  }, flipped?0:120);
+    $("fNum").textContent = lapsed.has(current) ? "Retry" : isNew(current) ? "New" : `Box ${st(current).box}`;
+  },120);
   setButtons(); update();
 }
 
@@ -290,39 +350,69 @@ function setButtons(){ $("btnFlip").hidden=flipped; $("btnAgain").hidden=!flippe
 
 function grade(ok){
   if(!flipped||current===null) return;
-  const first=!seen.has(current); seen.add(current);
-  if(ok){ good++; if(first) firstTry++; }
-  else { again++; missed.add(current); queue.splice(Math.min(3,queue.length),0,current); }
+  const c=CARDS[current];
+  if(mode==="review"){
+    const wasNew=isNew(current);
+    if(wasNew && !lapsed.has(current)) S.newCount++;
+    const s=S.cards[c.id]||{box:0,due:TODAY,reps:0};
+    if(ok){
+      s.box = lapsed.has(current) ? 1 : Math.min(s.box+1, INTERVALS.length-1);
+      s.due = addDays(TODAY, INTERVALS[s.box]); s.reps++;
+      S.cards[c.id]=s; doneCount++;
+    } else {
+      s.box=0; s.due=TODAY; S.cards[c.id]=s;
+      lapsed.add(current); queue.splice(Math.min(3,queue.length),0,current);
+    }
+    save();
+  } else {
+    if(ok) doneCount++; else { lapsed.add(current); queue.splice(Math.min(3,queue.length),0,current); }
+  }
   next();
 }
 
 function update(){
-  const done = total - queue.length - (current!==null&&$("done").hidden?1:0);
-  $("sGood").textContent=good; $("sAgain").textContent=again; $("sLeft").textContent=queue.length+($("done").hidden?1:0);
-  const prog = total? (good/total)*100 : 0;
-  $("pBar").style.width=prog+"%"; $("pText").textContent=`${good} / ${total}`;
+  const learned=CARDS.filter(c=>S.cards[c.id]&&S.cards[c.id].box>0).length;
+  $("sStreak").textContent=streak(); $("sLearned").textContent=learned; $("sTotal").textContent=CARDS.length;
+  const left = queue.length + (current!==null && $("done").hidden ? 1 : 0);
+  $("sLeft").textContent = mode==="review" ? left : CARDS.map((c,i)=>i).filter(isDue).length;
+  $("pBar").style.width=(total?doneCount/total*100:0)+"%";
+  $("pText").textContent=`${doneCount} / ${total}`;
+  $("pMode").textContent = mode==="review" ? "Today" : "Practice · not scheduled";
 }
 
 function finish(){
   current=null; $("study").hidden=true; $("done").hidden=false;
-  const pct = total? Math.round(firstTry/total*100):0;
-  $("dScore").textContent=pct+"%";
-  $("dTitle").textContent = pct>=85?"Exam-ready":pct>=60?"Solid ground":"Worth another pass";
-  $("dText").textContent = `You recalled ${firstTry} of ${total} cards on the first try` + (missed.size?`, and ${missed.size} needed another go.`:".");
-  $("btnMissed").hidden = !missed.size;
-  $("sLeft").textContent=0; $("pBar").style.width="100%";
+  const allDue = CARDS.map((c,i)=>i).filter(isDue).length;
+  if(mode==="review" && allDue===0 && !S.history.includes(TODAY)){ S.history.push(TODAY); S.history=S.history.slice(-120); save(); }
+  const n=streak(), tomorrow=CARDS.filter(c=>S.cards[c.id]&&S.cards[c.id].due<=addDays(TODAY,1)).length;
+  const newLeft=CARDS.map((c,i)=>i).filter(i=>inTopic(i)&&isNew(i)).length;
+  $("dScore").textContent=n;
+  $("dTitle").textContent = n===1?"day streak":"day streak";
+  $("dEyebrow").textContent = mode==="review" ? (allDue? "Topic done · other topics still due" : "Done for today") : "Practice finished";
+  $("dText").textContent = mode==="review"
+    ? (total? `You reviewed ${total} card${total>1?"s":""}. ` : "Nothing due right now. ") + `${tomorrow} card${tomorrow===1?"":"s"} due tomorrow.` + (newLeft?` ${newLeft} new card${newLeft===1?"":"s"} still to learn.`:" Every card is in rotation.")
+    : `Practice doesn't change your schedule. Come back tomorrow for ${tomorrow} due card${tomorrow===1?"":"s"}.`;
+  $("btnMore").hidden = !newLeft;
+  renderWeek(); renderChips(); update();
+  $("sLeft").textContent = allDue;
 }
 
 $("card").addEventListener("click",flip);
 $("btnFlip").onclick=flip;
 $("btnAgain").onclick=()=>grade(false);
 $("btnGood").onclick=()=>grade(true);
-$("btnShuffle").onclick=()=>{ if(current!==null){queue.unshift(current)} shuffle(queue); next(); };
-$("btnReset").onclick=()=>start();
-$("btnRestart").onclick=()=>start();
-$("btnMissed").onclick=()=>start([...missed]);
+$("btnMore").onclick=()=>{ const idx=CARDS.map((c,i)=>i).filter(i=>inTopic(i)&&isNew(i)).slice(0,5); start(idx,"review"); };
+$("btnCram").onclick=()=>start(shuffle(CARDS.map((c,i)=>i).filter(inTopic)),"practice");
+$("btnToday").onclick=()=>startToday();
+let resetArmed=false, resetTimer;
+$("btnReset").onclick=()=>{
+  const b=$("btnReset");
+  if(!resetArmed){resetArmed=true;b.textContent="Tap again to erase progress";b.classList.add("danger");resetTimer=setTimeout(()=>{resetArmed=false;b.textContent="Reset progress";b.classList.remove("danger")},4000);return}
+  clearTimeout(resetTimer); resetArmed=false; b.textContent="Reset progress"; b.classList.remove("danger");
+  S={cards:{},history:[],newDate:TODAY,newCount:0}; save(); renderWeek(); renderChips(); startToday();
+};
 document.addEventListener("keydown",e=>{
-  if(e.target.closest("button")&&(e.key===" "||e.key==="Enter")&&e.target.id!=="card") return;
+  if(e.target.closest("button")&&(e.key===" "||e.key==="Enter")) return;
   if(!$("study").hidden){
     if(e.key===" "||e.key==="Enter"){e.preventDefault();flip()}
     else if(e.key==="1"||e.key==="ArrowLeft") grade(false);
@@ -330,7 +420,7 @@ document.addEventListener("keydown",e=>{
   }
 });
 
-renderChips(); start();
+renderWeek(); renderChips(); startToday();
 </script>
 </body>
 </html>
