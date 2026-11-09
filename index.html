@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Org Psych Recall</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one centred study column — header, topic chips, a single flip card, grading bar. Dark-first, gold accent. */
+:root{
+  --bg:#12131c; --bg-2:#1a1c29; --surface:#202336; --surface-2:#282b42;
+  --line:#34385a; --fg:#ece8dc; --muted:#a19e95; --gold:#d9b25f; --gold-soft:rgba(217,178,95,.14);
+  --again:#e07a6a; --again-soft:rgba(224,122,106,.14); --good:#7cc29a; --good-soft:rgba(124,194,154,.14);
+  --shadow:0 24px 60px -24px rgba(0,0,0,.65);
+  --display:"Fraunces",Georgia,"Times New Roman",serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
+  --bg:#eef0f4; --bg-2:#e4e7ee; --surface:#ffffff; --surface-2:#f6f4ee;
+  --line:#d3d6e0; --fg:#1d1f2c; --muted:#5f6272; --gold:#9a7120; --gold-soft:rgba(154,113,32,.12);
+  --again:#b84a3a; --again-soft:rgba(184,74,58,.1); --good:#2f7d55; --good-soft:rgba(47,125,85,.1);
+  --shadow:0 24px 50px -28px rgba(29,31,44,.35); color-scheme:light}}
+:root[data-theme="light"]{
+  --bg:#eef0f4; --bg-2:#e4e7ee; --surface:#ffffff; --surface-2:#f6f4ee;
+  --line:#d3d6e0; --fg:#1d1f2c; --muted:#5f6272; --gold:#9a7120; --gold-soft:rgba(154,113,32,.12);
+  --again:#b84a3a; --again-soft:rgba(184,74,58,.1); --good:#2f7d55; --good-soft:rgba(47,125,85,.1);
+  --shadow:0 24px 50px -28px rgba(29,31,44,.35); color-scheme:light}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0}
+html,body{min-height:100%}
+body{background:radial-gradient(1200px 600px at 50% -10%,var(--bg-2),var(--bg) 60%) fixed,var(--bg);background-color:var(--bg);color:var(--fg);font:16px/1.55 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 40px}
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.eyebrow{font:500 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+h1{font:600 clamp(26px,5vw,34px)/1.1 var(--display);margin:8px 0 0;text-wrap:balance;letter-spacing:-.01em}
+.stats{display:flex;gap:18px;font:500 12px/1.2 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.stats b{display:block;font:600 20px/1 var(--display);color:var(--fg);margin-bottom:4px}
+.stats .g b{color:var(--good)} .stats .a b{color:var(--again)}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{appearance:none;border:1px solid var(--line);background:transparent;color:var(--muted);font:500 13px/1 var(--body);padding:9px 13px;border-radius:999px;cursor:pointer;transition:all .18s ease;display:inline-flex;gap:7px;align-items:center}
+.chip span{font:500 11px/1 var(--mono);opacity:.75;font-variant-numeric:tabular-nums}
+.chip:hover{color:var(--fg);border-color:var(--gold)}
+.chip[aria-pressed="true"]{background:var(--gold-soft);border-color:var(--gold);color:var(--fg)}
+.chip:focus-visible,.btn:focus-visible,.card:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+
+.progress{display:flex;align-items:center;gap:12px;font:500 12px/1 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.bar{flex:1;height:4px;background:var(--line);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold),color-mix(in srgb,var(--gold) 60%,var(--good)));transition:width .35s ease}
+
+.stage{perspective:1600px}
+.card{position:relative;width:100%;min-height:360px;cursor:pointer;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.2,.75,.25,1);border-radius:18px}
+.card.flipped{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:18px;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);padding:26px 28px 22px;display:flex;flex-direction:column;gap:14px;overflow:auto}
+.face::before{content:"";position:absolute;inset:8px;border:1px solid var(--gold-soft);border-radius:12px;pointer-events:none}
+.back{transform:rotateY(180deg);background:var(--surface-2)}
+.meta{display:flex;justify-content:space-between;gap:12px;font:500 11px/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.meta .topic{color:var(--gold)}
+.q{font:600 clamp(21px,4vw,27px)/1.3 var(--display);margin:auto 0;text-wrap:balance}
+.hint{font:500 12px/1 var(--mono);color:var(--muted);text-align:center}
+.a{font-size:16px;margin:0}
+.a p{margin:0 0 8px}
+.a ul{margin:4px 0 0;padding-left:20px;display:grid;gap:5px}
+.a li::marker{color:var(--gold)}
+.a em{font-style:normal;color:var(--gold);font-weight:600}
+.note{margin-top:auto;font-size:13px;color:var(--muted);border-top:1px dashed var(--line);padding-top:10px}
+.note b{color:var(--fg);font-weight:600}
+.src{font:500 11px/1.3 var(--mono);color:var(--muted)}
+.src::before{content:"◆ ";color:var(--gold)}
+
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:600 15px/1 var(--body);padding:16px;border-radius:14px;cursor:pointer;display:flex;justify-content:center;align-items:center;gap:10px;transition:transform .12s ease,background .18s ease,border-color .18s ease}
+.btn:hover{transform:translateY(-1px)}
+.btn kbd{font:500 11px/1 var(--mono);padding:4px 6px;border:1px solid var(--line);border-radius:6px;color:var(--muted)}
+.btn.again{border-color:color-mix(in srgb,var(--again) 50%,var(--line))} .btn.again:hover{background:var(--again-soft)}
+.btn.good{border-color:color-mix(in srgb,var(--good) 50%,var(--line))} .btn.good:hover{background:var(--good-soft)}
+.btn.flip{grid-column:1/-1;background:var(--gold-soft);border-color:var(--gold)}
+.btn.ghost{background:transparent;font-weight:500;font-size:14px;padding:12px}
+.btn[disabled]{opacity:.4;cursor:default;transform:none}
+
+.toolbar{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+
+.done{text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center;padding:34px 24px;border:1px solid var(--line);border-radius:18px;background:var(--surface);box-shadow:var(--shadow)}
+.done h2{font:600 28px/1.15 var(--display);margin:0}
+.done .score{font:700 64px/1 var(--display);color:var(--gold);font-variant-numeric:tabular-nums}
+.done p{margin:0;color:var(--muted);max-width:44ch}
+.done .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+
+footer{font:500 11px/1.6 var(--mono);color:var(--muted);text-align:center}
+
+@media (max-width:480px){.face{padding:22px 20px 18px}.card{min-height:400px}.stats{gap:14px}}
+@media (prefers-reduced-motion:reduce){.card,.bar i,.btn,.chip{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Οργανωσιακή Ψυχολογία · Zettelkasten</div>
+      <h1>Org Psych Recall</h1>
+    </div>
+    <div class="stats" aria-live="polite">
+      <div class="g"><b id="sGood">0</b>known</div>
+      <div class="a"><b id="sAgain">0</b>again</div>
+      <div><b id="sLeft">0</b>left</div>
+    </div>
+  </header>
+
+  <div class="chips" id="chips" role="group" aria-label="Topics"></div>
+
+  <div class="progress"><span id="pText">0 / 0</span><div class="bar"><i id="pBar"></i></div></div>
+
+  <section id="study">
+    <div class="stage">
+      <div class="card" id="card" tabindex="0" role="button" aria-label="Flashcard. Press space to flip.">
+        <div class="face front">
+          <div class="meta"><span class="topic" id="fTopic"></span><span id="fNum"></span></div>
+          <div class="q" id="fQ"></div>
+          <div class="hint">Click or press Space to reveal</div>
+        </div>
+        <div class="face back">
+          <div class="meta"><span class="topic" id="bTopic"></span><span class="src" id="bSrc"></span></div>
+          <div class="a" id="bA"></div>
+          <div class="note" id="bNote" hidden></div>
+        </div>
+      </div>
+    </div>
+    <div class="controls" style="margin-top:18px">
+      <button class="btn flip" id="btnFlip">Show answer <kbd>Space</kbd></button>
+      <button class="btn again" id="btnAgain" hidden>Again <kbd>1</kbd></button>
+      <button class="btn good" id="btnGood" hidden>Got it <kbd>2</kbd></button>
+    </div>
+  </section>
+
+  <section class="done" id="done" hidden>
+    <div class="eyebrow">Session complete</div>
+    <div class="score" id="dScore">0%</div>
+    <h2 id="dTitle">First-try recall</h2>
+    <p id="dText"></p>
+    <div class="row">
+      <button class="btn good" id="btnMissed">Review missed cards</button>
+      <button class="btn ghost" id="btnRestart">Start over</button>
+    </div>
+  </section>
+
+  <div class="toolbar">
+    <button class="btn ghost" id="btnShuffle">Shuffle</button>
+    <button class="btn ghost" id="btnReset">Restart deck</button>
+  </div>
+
+  <footer>Built from the permanent notes linked in your course note · Again sends a card back into the queue</footer>
+</div>
+
+<script>
+const CARDS = [
+// ── Foundations
+{t:"Foundations",s:"What is psychology?",q:"How is psychology defined, and why does it count as a science?",a:"<p>The study of the <em>behaviour</em> and <em>cognitive processes</em> of humans.</p><p>It is a science because it uses the scientific method and relies on evidence and data, not personal opinion.</p>"},
+{t:"Foundations",s:"Psychology schools of thought",q:"Name the three schools of thought from your course and the figures behind each.",a:"<ul><li><em>Psychoanalysis</em>: Freud (and Jung)</li><li><em>Behaviourism</em>: Watson and Skinner</li><li><em>Cognitive psychology</em>: mental processes such as learning, memory and decision-making</li></ul>",n:"Your course lists the third school as <b>Γνωστική (cognitive)</b>. Social-cognitive theory is a separate approach."},
+{t:"Foundations",s:"Psychology schools of thought",q:"How does psychoanalysis view the person?",a:"<p>As the focal point of a struggle between individual <em>unconscious</em> processes and external social forces.</p>"},
+{t:"Foundations",s:"Behaviourism",q:"What does behaviourism study, and what does it leave out?",a:"<ul><li>Only obvious, measurable, <em>observable</em> behaviour</li><li>The link between <em>stimulus and response</em>, and the consequences of that response</li><li>It ignores internal, non-observable factors and focuses only on the external environment</li></ul>"},
+{t:"Foundations",s:"Social-cognitivism",q:"What is the social-cognitive approach, and which two concepts does it include?",a:"<p>A post-WWII approach influenced by both psychoanalysis and behaviourism. It stresses the individual's <em>power to affect and change their own development</em>.</p><ul><li>Self-efficacy</li><li>Locus of control</li></ul>"},
+{t:"Foundations",s:"I-O Psychology",q:"Define Industrial-Organisational (I-O) psychology.",a:"<p>The field that scientifically studies human behaviour <em>related to</em> the workplace by applying core psychological principles and theories.</p>"},
+{t:"Foundations",s:"I-O Psychology",q:"Why is I-O psychology about behaviour \"related to\" the workplace rather than \"at\" it?",a:"<p>It also examines how work affects a person's wider life, starting in early adulthood, for example <em>career orientation</em>.</p>"},
+{t:"Foundations",s:"I-O Psychology vs HRM",q:"I-O psychology vs HRM: how do their foundation and focus differ?",a:"<ul><li><em>I-O psychology</em>: scientific; measures and predicts behaviour</li><li><em>HRM</em>: administrative; operates and manages human capital</li></ul>"},
+{t:"Foundations",s:"I-O Psychology vs HRM",q:"I-O psychology vs HRM: what tools and education does each rely on?",a:"<ul><li><em>I-O psychology</em>: psychometric tools, experiments, statistics; MSc or PhD in psychology</li><li><em>HRM</em>: procedures, policies, legislation; HRM training or an MBA</li></ul>"},
+{t:"Foundations",s:"Ethics in I-O Psychology",q:"Why does I-O psychology face unique ethical issues, and what are three of them?",a:"<p>It serves both the organisation <em>and</em> its employees.</p><ul><li>Privacy and GDPR: who owns assessment data?</li><li>Fairness: no algorithmic bias by race, gender or age</li><li>Conflict of interest: layoffs, reorgs, performance reviews</li></ul>"},
+{t:"Foundations",s:"Evidence-based Management",q:"What is evidence-based management, and what does it borrow from?",a:"<p>Making organisational decisions on scientifically proven facts and practices. It borrows from <em>evidence-based medicine</em> and tries to close the research–practice gap.</p>"},
+{t:"Foundations",s:"Evidence-based Management",q:"What are the four sources of evidence in EBM?",a:"<ul><li>Scientific research (peer-reviewed studies, meta-analyses)</li><li>Organisational data (your own metrics)</li><li>Professional expertise</li><li>Stakeholder perspectives</li></ul>"},
+
+// ── Pioneers
+{t:"Pioneers",s:"👤 F.W. Taylor",q:"Who was Frederick W. Taylor, and what did he believe?",a:"<p>An American mechanical engineer (1856–1915), the father of <em>Scientific Management</em> (Taylorism).</p><p>He believed scientific analysis could find the <em>\"one best way\"</em> to perform any task.</p>"},
+{t:"Pioneers",s:"👤 F.W. Taylor",q:"What did Peter Drucker say about Taylor?",a:"<p>\"He was the first man in recorded history who deemed <em>work deserving of systematic observation and study</em>.\"</p>"},
+{t:"Pioneers",s:"👤 F.W. Taylor",q:"Which industrial innovation did Taylor's principles heavily influence?",a:"<p>Ford's <em>moving assembly line</em>.</p>"},
+{t:"Pioneers",s:"Scientific Management",q:"Define Scientific Management.",a:"<p>A theory of management that analyses workflows to improve efficiency, especially <em>labour productivity</em>. It was one of the earliest attempts to apply science to management processes.</p>"},
+{t:"Pioneers",s:"Scientific Management",q:"List the five core ideas of Scientific Management.",a:"<ul><li>Standardisation of tools, procedures and conditions</li><li>Scientific selection: match each worker to a suitable task</li><li>Training in the standard method, not learning by imitation</li><li>Support through procedure design and removing hurdles</li><li>Linking productivity to compensation</li></ul>"},
+{t:"Pioneers",s:"Scientific Management",q:"Name three advantages and three disadvantages of Scientific Management.",a:"<p><em>Advantages:</em> fair compensation, systematic task analysis, scientific selection and training.</p><p><em>Disadvantages:</em> ignored social context, ignored diversity, treated workers as tools with no part in problem solving.</p>"},
+{t:"Pioneers",s:"Scientific Management",q:"Why did workers end up rejecting Scientific Management?",a:"<p>Many companies working with Taylor <em>ignored his advice to give strong compensation benefits</em> tied to performance.</p>"},
+{t:"Pioneers",s:"👤 Frank & Lillian Gilbreth",q:"How did the Gilbreths differ from Taylor, and why did they fall out?",a:"<p>They took Taylor's ideas in a more <em>human</em> direction and even tested them in family life.</p><p>The relationship ended over rivalry and Taylor's insistence on <em>stopwatch timing</em>.</p>"},
+{t:"Pioneers",s:"👤 Frank & Lillian Gilbreth",q:"Who is considered the first female organisational psychologist, and what did she believe?",a:"<p><em>Lillian Gilbreth</em> (1878–1972). She believed Scientific Management should help workers improve their output by <em>developing their skills</em>.</p>"},
+{t:"Pioneers",s:"👤 Frank & Lillian Gilbreth",q:"How did Frank Gilbreth's work change surgery?",a:"<p>Nurses hand instruments to surgeons when called, which <em>reduced the time patients spent on the operating table</em>.</p>"},
+{t:"Pioneers",s:"Hawthorne Studies",q:"Where and when were the Hawthorne Studies conducted?",a:"<p>At Western Electric's <em>Hawthorne Works</em> near Chicago, <em>1924–1932</em>.</p>"},
+{t:"Pioneers",s:"Hawthorne Studies",q:"What did the Hawthorne Studies find, and why do they matter?",a:"<p>Productivity kept rising across many environmental changes, which was attributed to <em>social factors</em> (peer pressure, being observed).</p><p>They marked the turn from Scientific Management to the <em>Human Relations Movement</em>.</p>"},
+{t:"Pioneers",s:"Hawthorne Studies",q:"What is the Hawthorne effect, and is it always positive?",a:"<p>People change their behaviour <em>when observed</em> (term coined in the 1950s).</p><p>Not always positive: in another experiment, workers deliberately kept productivity low to avoid being given more work.</p>"},
+{t:"Pioneers",s:"Hawthorne Studies",q:"How well do the Hawthorne Studies hold up scientifically?",a:"<p>Poorly by modern standards. They count as a <em>perspective shift</em> rather than solid evidence: the first time worker satisfaction was treated as a factor in productivity.</p>"},
+
+// ── Differences & IQ
+{t:"Differences & IQ",s:"Differential psychology",q:"What does differential psychology examine?",a:"<p>The nature, extent and causes of <em>individual differences</em> (variation between individuals of the same species), including the nature vs nurture question.</p>"},
+{t:"Differences & IQ",s:"Differential psychology",q:"Name the six kinds of individual differences.",a:"<ul><li>Physical</li><li>Psychomotor</li><li>General intelligence and cognitive skills</li><li>Personality and motives</li><li>Emotional and social competence</li><li>Values, interests and attitudes</li></ul>"},
+{t:"Differences & IQ",s:"Differential psychology",q:"How is differential psychology used at work, and which branch is it closely tied to?",a:"<p>To <em>predict and develop</em> desired behaviour. It is closely tied to <em>psychometrics</em>.</p>"},
+{t:"Differences & IQ",s:"Psychometrics",q:"What is psychometrics?",a:"<p>The branch of psychology that <em>measures and assesses</em> psychological traits and individual differences, such as skills, personality and interests.</p>"},
+{t:"Differences & IQ",s:"Intelligence (IQ)",q:"Define intelligence.",a:"<p>Our ability to <em>learn, think rationally and adapt</em> to new inputs.</p>"},
+{t:"Differences & IQ",s:"Intelligence (IQ)",q:"How good is intelligence as a predictor of work performance?",a:"<p><em>Strong but insufficient</em>, and weaker than previously thought. Most jobs also need communication and interpersonal skills, so a very bright person can still fail.</p>"},
+{t:"Differences & IQ",s:"Intelligence (IQ)",q:"Why does measured intelligence keep rising between generations?",a:"<p>Probably because our <em>environment becomes more complex</em> and people have to adapt to it.</p>"},
+{t:"Differences & IQ",s:"Intelligence (IQ)",q:"Can an organisation raise its staff's intelligence through education?",a:"<p>No. Intelligence stays <em>relatively stable</em> across a lifetime and isn't generally linked to education level.</p>"},
+{t:"Differences & IQ",s:"Major theories of intelligence",q:"What did Spearman (1904) propose?",a:"<p>A single <em>general factor of intelligence (g)</em> that affects all activities requiring intelligence.</p>"},
+{t:"Differences & IQ",s:"Major theories of intelligence",q:"Thurstone (1938): name the seven primary mental abilities.",a:"<ul><li>Verbal comprehension</li><li>Word fluency</li><li>Number</li><li>Space</li><li>Associative memory</li><li>Perceptual speed</li><li>Reasoning / induction</li></ul>"},
+{t:"Differences & IQ",s:"Major theories of intelligence",q:"Gardner (1983): name the eight multiple intelligences.",a:"<ul><li>Linguistic</li><li>Logical-mathematical</li><li>Spatial-visual</li><li>Bodily-kinesthetic</li><li>Musical</li><li>Interpersonal</li><li>Intrapersonal</li><li>Naturalist</li></ul>"},
+{t:"Differences & IQ",s:"Major theories of intelligence",q:"Sternberg (1985): what are the three aspects of intelligence?",a:"<ul><li><em>Analytical</em>: problem-solving, abstract reasoning</li><li><em>Creative</em>: handling novel situations, original ideas</li><li><em>Practical</em>: \"street smarts\", adapting to everyday environments</li></ul>"},
+
+// ── Personality
+{t:"Personality",s:"Personality and its traits",q:"How did Pervin (1993) define personality?",a:"<p>The set of an individual's characteristics that <em>determine their behaviour</em>.</p>"},
+{t:"Personality",s:"Personality and its traits",q:"What are the four basic characteristics of personality?",a:"<ul><li><em>Stability</em> over the lifetime</li><li><em>Internality</em>: we only observe its results</li><li><em>Consistency</em> of reactions to stimuli</li><li><em>Differentiation</em>: people react differently to the same challenge</li></ul>"},
+{t:"Personality",s:"Trait theory…",q:"Which personality approach has the most practical use in I-O psychology?",a:"<p><em>Trait theory</em>, the dominant approach compared with psychoanalysis, behaviourism and social-cognitivism.</p>",n:"Your course calls it κυρίαρχη τάση, the <b>dominant</b> approach. It isn't \"definitive\"."},
+{t:"Personality",s:"Trait theory…",q:"What is trait theory based on, and how did Pervin define a trait?",a:"<p>The <em>lexical hypothesis</em>: we describe others with everyday adjectives, so important traits are encoded in language.</p><p>A trait is a <em>general predisposition to behave in a certain way</em>.</p>"},
+{t:"Personality",s:"Trait theory…",q:"Are traits on/off categories?",a:"<p>No. Traits are a <em>range</em>, not boolean. Everyone has every trait, some to a greater degree than others.</p>"},
+{t:"Personality",s:"Five-Factor Model (Big Five)",q:"What does OCEAN stand for?",a:"<ul><li><em>O</em>penness to experience</li><li><em>C</em>onscientiousness</li><li><em>E</em>xtraversion</li><li><em>A</em>greeableness</li><li><em>N</em>euroticism</li></ul>"},
+{t:"Personality",s:"Five-Factor Model (Big Five)",q:"Openness: how do high scorers tend to be?",a:"<p><em>Curious, imaginative, unconventional</em>, with interest in aesthetics and art.</p>"},
+{t:"Personality",s:"Five-Factor Model (Big Five)",q:"Conscientiousness: describe high and low scorers.",a:"<p><em>High:</em> organised, disciplined, goal-driven (competence, order, sense of duty, self-discipline).</p><p><em>Low:</em> inconsistent, disorganised, low sense of duty, few ambitions.</p>"},
+{t:"Personality",s:"Five-Factor Model (Big Five)",q:"Extraversion refers to the quantity of human connections. What does Agreeableness refer to?",a:"<p>The <em>quality</em> of human connections.</p><p><em>High:</em> cooperative, trusting, compassionate. <em>Low:</em> self-centred, sceptical, competitive.</p>"},
+{t:"Personality",s:"Five-Factor Model (Big Five)",q:"Neuroticism: describe high and low scorers. What is the reverse pole called?",a:"<p><em>High:</em> anxious, frequent mood swings and stress.</p><p><em>Low:</em> confident in their abilities, handle stress without extreme feelings. The reverse pole is <em>emotional stability</em>.</p>"},
+{t:"Personality",s:"Five-Factor Model (Big Five)",q:"Can the Big Five give a single \"personality score\"?",a:"<p>No. The five factors are <em>largely independent</em>, so there is no overall score.</p>"},
+{t:"Personality",s:"Conscientiousness and emotional stability…",q:"Which two traits best predict job performance?",a:"<ul><li><em>Conscientiousness</em>: the only trait that predicts performance across virtually all jobs</li><li><em>Emotional stability</em>: weaker but fairly general, especially in high-stress, high-stakes roles</li></ul>"},
+{t:"Personality",s:"Structured job interviews…",q:"According to Sackett et al., what is the leading predictor of job performance?",a:"<p><em>Structured job interviews</em>, ahead of the cognitive ability tests that were preferred in the past.</p>"},
+{t:"Personality",s:"Structured job interviews…",q:"What makes a job interview \"structured\"?",a:"<ul><li>Same job-related questions for every candidate</li><li>In the same order</li><li>Scored against predefined rating scales</li><li>Ideally by more than one interviewer</li></ul>"},
+
+// ── Freud
+{t:"Freud",s:"Freud's psychoanalytic theories",q:"What was Freud's core premise about behaviour?",a:"<p>Behaviour is driven by <em>instincts</em>: we seek pleasure and avoid pain or dissatisfaction.</p>",n:"Strictly, that is the <b>id's pleasure principle</b>. The ego follows the reality principle."},
+{t:"Freud",s:"Freud's psychoanalytic theories",q:"Name Freud's four theories in your notes.",a:"<ul><li>Topographical model (levels of awareness)</li><li>Structural model (id, ego, superego)</li><li>Five psychosexual stages</li><li>Ego defense mechanisms</li></ul>"},
+{t:"Freud",s:"Topographical Model",q:"What are the three levels of the topographical model?",a:"<ul><li><em>Conscious</em>: tip of the iceberg; what we're aware of</li><li><em>Preconscious</em>: just below the surface; can be recalled with effort</li><li><em>Unconscious</em>: the submerged bulk; not directly accessible</li></ul>",n:"Your note says \"subconscious\". Freud's term is <b>preconscious</b>."},
+{t:"Freud",s:"Structural Model",q:"Describe the id, ego and superego.",a:"<ul><li><em>Id</em>: basic instincts, present from birth, fully unconscious</li><li><em>Ego</em>: spans all levels; the only part that deals with the environment</li><li><em>Superego</em>: grows out of the ego; the observing, judging moral compass</li></ul>"},
+{t:"Freud",s:"Structural Model",q:"When do the ego and the superego start to develop?",a:"<ul><li><em>Ego</em>: around 6–8 months</li><li><em>Superego</em>: from the 3rd to 5th year</li></ul>"},
+{t:"Freud",s:"Five Psychosexual Stages",q:"List the five psychosexual stages in order, with ages.",a:"<ul><li><em>Oral</em>: birth–1/2 years</li><li><em>Anal</em>: 1–3 years</li><li><em>Phallic</em>: 3–6 years</li><li><em>Latency</em>: 6 years–adolescence</li><li><em>Genital</em>: adolescence onward</li></ul>"},
+{t:"Freud",s:"Five Psychosexual Stages",q:"Oral stage: key conflict, and signs of fixation in adults?",a:"<p>Conflict: <em>weaning</em>.</p><p>Fixation: nail biting, smoking, overeating; dependency or sarcasm.</p>"},
+{t:"Freud",s:"Five Psychosexual Stages",q:"Anal stage: key conflict, and how fixation differs with strict vs lenient parents?",a:"<p>Conflict: <em>toilet training</em>.</p><p><em>Strict:</em> obsessively neat, rigid, orderly, stubborn. <em>Lenient:</em> messy, disorganised, destructive.</p>"},
+{t:"Freud",s:"Five Psychosexual Stages",q:"Phallic stage: what is the key conflict and how is it resolved?",a:"<p>The <em>Oedipus complex</em>: unconscious desire for the opposite-sex parent and rivalry with the same-sex parent.</p><p>Resolved by repressing these feelings and <em>identifying</em> with the same-sex parent.</p>",n:"The \"Electra complex\" is Jung's term. Freud rejected it."},
+{t:"Freud",s:"Five Psychosexual Stages",q:"What happens in the latency and genital stages?",a:"<p><em>Latency:</em> libido is suppressed; energy goes into social life, school and hobbies.</p><p><em>Genital:</em> sexual interests mature and turn to appropriate partners.</p>"},
+{t:"Freud",s:"Ego defense mechanisms",q:"What are ego defense mechanisms, and who systematised them?",a:"<p>Unconscious strategies the ego uses to protect itself from anxiety caused by conflict between the <em>id, superego and reality</em>.</p><p>Introduced by Freud, systematised by his daughter <em>Anna Freud</em>.</p>"},
+{t:"Freud",s:"Ego defense mechanisms",q:"Which defense is foundational, and which is the healthiest?",a:"<ul><li><em>Repression</em> is foundational: pushing threatening thoughts out of awareness</li><li><em>Sublimation</em> is the healthiest: channelling impulses into socially valued activity</li></ul>"},
+{t:"Freud",s:"Ego defense mechanisms",q:"Angry at your boss, you snap at your family. Which defense?",a:"<p><em>Displacement</em>: redirecting emotion to a safer target.</p>"},
+{t:"Freud",s:"Ego defense mechanisms",q:"A jealous person accuses their partner of jealousy. Which defense?",a:"<p><em>Projection</em>: attributing your own unacceptable feelings to others.</p>"},
+{t:"Freud",s:"Ego defense mechanisms",q:"You're excessively friendly to a colleague you resent. Which defense?",a:"<p><em>Reaction formation</em>: expressing the opposite of what you feel.</p>"},
+{t:"Freud",s:"Ego defense mechanisms",q:"Rejected for a role, you say \"I didn't want that job anyway\". Which defense?",a:"<p><em>Rationalisation</em>: offering plausible but false reasons.</p>"},
+{t:"Freud",s:"Ego defense mechanisms",q:"Under stress, an adult sulks and throws a tantrum. Which defense?",a:"<p><em>Regression</em>: reverting to earlier developmental behaviour.</p>"},
+{t:"Freud",s:"Ego defense mechanisms",q:"\"I don't have a problem\", despite clear evidence. Which defense?",a:"<p><em>Denial</em>: refusing to accept a reality.</p>"}
+];
+
+const TOPICS = ["All", ...new Set(CARDS.map(c=>c.t))];
+const $ = id => document.getElementById(id);
+const store = {get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+
+let topic = store.get("opr-topic","All");
+if(!TOPICS.includes(topic)) topic="All";
+let queue=[], current=null, flipped=false, good=0, again=0, total=0, firstTry=0, missed=new Set(), seen=new Set();
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+function renderChips(){
+  $("chips").innerHTML="";
+  TOPICS.forEach(t=>{
+    const n = t==="All"?CARDS.length:CARDS.filter(c=>c.t===t).length;
+    const b=document.createElement("button");
+    b.className="chip"; b.type="button"; b.setAttribute("aria-pressed",String(t===topic));
+    b.innerHTML=`${t}<span>${n}</span>`;
+    b.onclick=()=>{topic=t;store.set("opr-topic",t);renderChips();start()};
+    $("chips").appendChild(b);
+  });
+}
+
+function start(list){
+  const pool = list || CARDS.map((c,i)=>i).filter(i=>topic==="All"||CARDS[i].t===topic);
+  queue = shuffle([...pool]); total=queue.length; good=0; again=0; firstTry=0; missed=new Set(); seen=new Set();
+  $("study").hidden=false; $("done").hidden=true; next();
+}
+
+function next(){
+  if(!queue.length){finish();return}
+  current=queue.shift(); flipped=false;
+  const c=CARDS[current];
+  $("card").classList.remove("flipped");
+  setTimeout(()=>{
+    $("fTopic").textContent=c.t; $("bTopic").textContent=c.t;
+    $("fQ").textContent=c.q; $("bA").innerHTML=c.a; $("bSrc").textContent=c.s;
+    if(c.n){$("bNote").innerHTML="<b>Correction:</b> "+c.n;$("bNote").hidden=false}else{$("bNote").hidden=true}
+    $("fNum").textContent = missed.has(current) ? "Retry" : `#${CARDS.indexOf(c)+1}`;
+  }, flipped?0:120);
+  setButtons(); update();
+}
+
+function flip(){ if(current===null) return; flipped=!flipped; $("card").classList.toggle("flipped",flipped); setButtons(); }
+function setButtons(){ $("btnFlip").hidden=flipped; $("btnAgain").hidden=!flipped; $("btnGood").hidden=!flipped; }
+
+function grade(ok){
+  if(!flipped||current===null) return;
+  const first=!seen.has(current); seen.add(current);
+  if(ok){ good++; if(first) firstTry++; }
+  else { again++; missed.add(current); queue.splice(Math.min(3,queue.length),0,current); }
+  next();
+}
+
+function update(){
+  const done = total - queue.length - (current!==null&&$("done").hidden?1:0);
+  $("sGood").textContent=good; $("sAgain").textContent=again; $("sLeft").textContent=queue.length+($("done").hidden?1:0);
+  const prog = total? (good/total)*100 : 0;
+  $("pBar").style.width=prog+"%"; $("pText").textContent=`${good} / ${total}`;
+}
+
+function finish(){
+  current=null; $("study").hidden=true; $("done").hidden=false;
+  const pct = total? Math.round(firstTry/total*100):0;
+  $("dScore").textContent=pct+"%";
+  $("dTitle").textContent = pct>=85?"Exam-ready":pct>=60?"Solid ground":"Worth another pass";
+  $("dText").textContent = `You recalled ${firstTry} of ${total} cards on the first try` + (missed.size?`, and ${missed.size} needed another go.`:".");
+  $("btnMissed").hidden = !missed.size;
+  $("sLeft").textContent=0; $("pBar").style.width="100%";
+}
+
+$("card").addEventListener("click",flip);
+$("btnFlip").onclick=flip;
+$("btnAgain").onclick=()=>grade(false);
+$("btnGood").onclick=()=>grade(true);
+$("btnShuffle").onclick=()=>{ if(current!==null){queue.unshift(current)} shuffle(queue); next(); };
+$("btnReset").onclick=()=>start();
+$("btnRestart").onclick=()=>start();
+$("btnMissed").onclick=()=>start([...missed]);
+document.addEventListener("keydown",e=>{
+  if(e.target.closest("button")&&(e.key===" "||e.key==="Enter")&&e.target.id!=="card") return;
+  if(!$("study").hidden){
+    if(e.key===" "||e.key==="Enter"){e.preventDefault();flip()}
+    else if(e.key==="1"||e.key==="ArrowLeft") grade(false);
+    else if(e.key==="2"||e.key==="ArrowRight") grade(true);
+  }
+});
+
+renderChips(); start();
+</script>
+</body>
+</html>
