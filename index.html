@@ -105,6 +105,15 @@ footer{font:500 11px/1.6 var(--mono);color:var(--muted);text-align:center;text-w
 .mode{font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
 .chip span.due{color:var(--gold);opacity:1}
 .btn.danger{color:var(--again);border-color:var(--again)}
+.sync{display:flex;flex-direction:column;gap:12px;padding:20px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.sync p{margin:0 0 10px;color:var(--muted);font-size:14px;max-width:60ch}
+.sync>div{display:flex;flex-direction:column;gap:10px}
+.coderow{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch}
+.coderow code{flex:1;min-width:0;font:500 15px/1 var(--mono);letter-spacing:.06em;padding:14px;border-radius:12px;background:var(--surface-2);border:1px dashed var(--gold);color:var(--gold);overflow-wrap:anywhere}
+.coderow input{flex:1;min-width:0;font:500 15px/1 var(--mono);padding:13px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);color:var(--fg)}
+.coderow input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+#syncStatus.err{color:var(--again)} #syncStatus.ok{color:var(--good)}
 
 @media (max-width:480px){.face{padding:22px 20px 18px}.card{min-height:400px}.stats{gap:14px}}
 @media (prefers-reduced-motion:reduce){.card,.bar i,.btn,.chip{transition:none}}
@@ -165,10 +174,29 @@ footer{font:500 11px/1.6 var(--mono);color:var(--muted);text-align:center;text-w
 
   <div class="toolbar">
     <button class="btn ghost" id="btnToday">Today's review</button>
+    <button class="btn ghost" id="btnSync" aria-expanded="false" aria-controls="syncPanel">Sync devices</button>
     <button class="btn ghost" id="btnReset">Reset progress</button>
   </div>
 
-  <footer>Got it pushes a card further out: 1 → 3 → 7 → 16 → 35 → 90 days · Again brings it back tomorrow · Progress is saved in this browser</footer>
+  <section class="sync" id="syncPanel" hidden>
+    <div class="eyebrow">Sync across devices</div>
+    <div id="syncHas" hidden>
+      <p>Enter this code on your other devices. Anyone with the code can see and change your progress, so keep it to yourself.</p>
+      <div class="coderow"><code id="syncCode"></code><button class="btn ghost" id="btnCopy">Copy</button></div>
+      <button class="btn ghost" id="btnUnlink">Stop syncing on this device</button>
+    </div>
+    <div id="syncNone">
+      <p>First device: create a code. Other devices: paste the code you created.</p>
+      <button class="btn good" id="btnCreate">Create sync code</button>
+      <form class="coderow" id="syncForm">
+        <label for="syncInput" class="sr">Sync code</label>
+        <input id="syncInput" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="xxxx-xxxx-xxxx-xxxx-xxxx">
+        <button class="btn ghost" type="submit">Link</button>
+      </form>
+    </div>
+  </section>
+
+  <footer>Got it pushes a card further out: 1 → 3 → 7 → 16 → 35 → 90 days · Again brings it back tomorrow · <span id="syncStatus">Progress is saved in this browser</span></footer>
 </div>
 
 <script>
@@ -270,9 +298,9 @@ function dayStr(d=new Date()){const z=n=>String(n).padStart(2,"0");return `${d.g
 function addDays(s,n){const [y,m,d]=s.split("-").map(Number);return dayStr(new Date(y,m-1,d+n))}
 const TODAY = dayStr();
 
-let S = ls.get(KEY,null) || {cards:{}, history:[], newDate:"", newCount:0};
+let S = ls.get(KEY,null) || {cards:{}, history:[], newDate:"", newCount:0, resetAt:0};
 if(S.newDate!==TODAY){S.newDate=TODAY;S.newCount=0}
-const save=()=>ls.set(KEY,S);
+const save=()=>{ls.set(KEY,S);schedulePush()};
 
 let topic = ls.get("opr-topic","All"); if(!TOPICS.includes(topic)) topic="All";
 let queue=[], current=null, flipped=false, mode="review", total=0, doneCount=0, lapsed=new Set();
@@ -357,10 +385,10 @@ function grade(ok){
     const s=S.cards[c.id]||{box:0,due:TODAY,reps:0};
     if(ok){
       s.box = lapsed.has(current) ? 1 : Math.min(s.box+1, INTERVALS.length-1);
-      s.due = addDays(TODAY, INTERVALS[s.box]); s.reps++;
+      s.due = addDays(TODAY, INTERVALS[s.box]); s.reps++; s.u=Date.now();
       S.cards[c.id]=s; doneCount++;
     } else {
-      s.box=0; s.due=TODAY; S.cards[c.id]=s;
+      s.box=0; s.due=TODAY; s.u=Date.now(); S.cards[c.id]=s;
       lapsed.add(current); queue.splice(Math.min(3,queue.length),0,current);
     }
     save();
@@ -409,9 +437,10 @@ $("btnReset").onclick=()=>{
   const b=$("btnReset");
   if(!resetArmed){resetArmed=true;b.textContent="Tap again to erase progress";b.classList.add("danger");resetTimer=setTimeout(()=>{resetArmed=false;b.textContent="Reset progress";b.classList.remove("danger")},4000);return}
   clearTimeout(resetTimer); resetArmed=false; b.textContent="Reset progress"; b.classList.remove("danger");
-  S={cards:{},history:[],newDate:TODAY,newCount:0}; save(); renderWeek(); renderChips(); startToday();
+  S={cards:{},history:[],newDate:TODAY,newCount:0,resetAt:Date.now()}; save(); renderWeek(); renderChips(); startToday();
 };
 document.addEventListener("keydown",e=>{
+  if(e.target.closest("input,textarea,form")) return;
   if(e.target.closest("button")&&(e.key===" "||e.key==="Enter")) return;
   if(!$("study").hidden){
     if(e.key===" "||e.key==="Enter"){e.preventDefault();flip()}
@@ -420,7 +449,81 @@ document.addEventListener("keydown",e=>{
   }
 });
 
-renderWeek(); renderChips(); startToday();
+// ── Cross-device sync (Netlify Function + Netlify Blobs) ───────
+const SYNC_KEY="opr-sync-code", API="/api/progress";
+let syncCode=ls.get(SYNC_KEY,""), pushTimer=null, syncing=false, syncAgain=false;
+
+function genCode(){const a="abcdefghjkmnpqrstuvwxyz23456789",b=new Uint8Array(20);crypto.getRandomValues(b);return [...b].map(x=>a[x%a.length]).join("").match(/.{4}/g).join("-")}
+function normCode(v){return (v.trim().toLowerCase().replace(/[^a-z0-9]/g,"").match(/.{1,4}/g)||[]).join("-")}
+const validCode=c=>/^[a-z0-9]{4}(-[a-z0-9]{4}){4}$/.test(c);
+
+function merge(a,b){
+  if(!b||typeof b!=="object") return a;
+  const ra=a.resetAt||0, rb=b.resetAt||0, resetAt=Math.max(ra,rb), cards={};
+  for(const src of [a.cards||{}, b.cards||{}]) for(const [id,c] of Object.entries(src)){
+    if((c.u||0)<resetAt) continue;
+    if(!cards[id]||(c.u||0)>(cards[id].u||0)) cards[id]=c;
+  }
+  const history=[...new Set([...(ra===resetAt?a.history||[]:[]),...(rb===resetAt?b.history||[]:[])])].sort().slice(-120);
+  let newDate=a.newDate||"", newCount=a.newCount||0;
+  if((b.newDate||"")>newDate){newDate=b.newDate;newCount=b.newCount||0}
+  else if(b.newDate===newDate) newCount=Math.max(newCount,b.newCount||0);
+  return {cards,history,newDate,newCount,resetAt};
+}
+
+function setStatus(t,cls=""){const el=$("syncStatus");el.textContent=t;el.className=cls}
+async function api(method,body){
+  const r=await fetch(`${API}?key=${encodeURIComponent(syncCode)}`,{method,cache:"no-store",headers:body?{"content-type":"application/json"}:{},body:body?JSON.stringify(body):undefined});
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  return r.json();
+}
+function schedulePush(){ if(!syncCode) return; clearTimeout(pushTimer); pushTimer=setTimeout(syncNow,1500); }
+
+async function syncNow(){
+  if(!syncCode) return;
+  if(syncing){syncAgain=true;return}
+  syncing=true; setStatus("Syncing…");
+  try{
+    const remote=await api("GET"), before=JSON.stringify(S);
+    S=merge(S,remote);
+    if(S.newDate!==TODAY){S.newDate=TODAY;S.newCount=0}
+    ls.set(KEY,S);
+    await api("PUT",S);
+    const t=new Date(), z=n=>String(n).padStart(2,"0");
+    setStatus(`Synced at ${z(t.getHours())}:${z(t.getMinutes())}`,"ok");
+    if(JSON.stringify(S)!==before) onRemoteChange();
+  }catch(e){ setStatus("Couldn't reach the sync service. Progress is saved here and will sync next time.","err"); }
+  finally{ syncing=false; if(syncAgain){syncAgain=false;syncNow()} }
+}
+
+function onRemoteChange(){
+  if(!$("done").hidden) finish();
+  else if(mode==="review" && doneCount===0 && !flipped && !lapsed.size) startToday();
+  else { renderWeek(); renderChips(); update(); }
+}
+
+function renderSync(){
+  $("syncHas").hidden=!syncCode; $("syncNone").hidden=!!syncCode; $("syncCode").textContent=syncCode;
+  if(!syncCode) setStatus("Progress is saved in this browser");
+}
+$("btnSync").onclick=()=>{const p=$("syncPanel");p.hidden=!p.hidden;$("btnSync").setAttribute("aria-expanded",String(!p.hidden))};
+$("btnCreate").onclick=()=>{syncCode=genCode();ls.set(SYNC_KEY,syncCode);renderSync();syncNow()};
+$("syncForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const c=normCode($("syncInput").value);
+  if(!validCode(c)){setStatus("That code doesn't look right. It should be 5 groups of 4 characters.","err");return}
+  syncCode=c; ls.set(SYNC_KEY,c); $("syncInput").value=""; renderSync(); syncNow();
+});
+$("btnCopy").onclick=async()=>{
+  const b=$("btnCopy");
+  try{await navigator.clipboard.writeText(syncCode);b.textContent="Copied"}
+  catch(e){const r=document.createRange();r.selectNodeContents($("syncCode"));const s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent="Selected"}
+  setTimeout(()=>b.textContent="Copy",1800);
+};
+$("btnUnlink").onclick=()=>{syncCode="";try{localStorage.removeItem(SYNC_KEY)}catch(e){}renderSync()};
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")syncNow()});
+
+renderWeek(); renderChips(); startToday(); renderSync(); syncNow();
 </script>
 </body>
 </html>
